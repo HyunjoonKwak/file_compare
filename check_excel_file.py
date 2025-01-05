@@ -4,7 +4,9 @@ from openpyxl.styles import PatternFill
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-# 보완: 셀 값 비교 함수
+# 비교에서 제외할 시트 목록
+EXCLUDED_SHEETS = {"Cover", "test description", "Results"}
+
 def are_values_equal(val1, val2):
     """
     값이 모두 None이면 동일하다고 간주,
@@ -22,6 +24,7 @@ def highlight_changes(file1, file2, output_file):
     - df1에만 있는 시트 => 전체가 '삭제된' 것으로 간주 (노란색)
     - df2에만 있는 시트 => 전체가 '추가된' 것으로 간주 (파란색)
     - 공통 시트 => 셀 단위로 변경/추가/삭제 여부 비교
+    - EXCLUDED_SHEETS 에 지정된 시트(Cover, test description, Results)는 비교에서 제외
     """
     # 파일 읽기
     df1 = pd.read_excel(file1, sheet_name=None)
@@ -29,18 +32,25 @@ def highlight_changes(file1, file2, output_file):
     
     # Output Workbook 생성
     wb = Workbook()
-    # 기본으로 생성되는 워크시트 제거 (sheet 이름이 "Sheet"인 기본 워크시트)
+    # 기본으로 생성되는 워크시트 제거
     default_sheet = wb.active
     wb.remove(default_sheet)
     
     # 색상 정의
-    # (start_color/end_color 동일하게 설정)
     red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")   # 변경된 부분
     blue_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")  # 추가된 부분
     yellow_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")# 삭제된 부분
 
-    # 1) 공통 시트 비교
-    common_sheets = set(df1.keys()).intersection(set(df2.keys()))
+    # 시트 이름 집합
+    df1_sheets = set(df1.keys())
+    df2_sheets = set(df2.keys())
+
+    # 비교 제외 시트를 제거한 집합
+    df1_sheets_included = df1_sheets - EXCLUDED_SHEETS
+    df2_sheets_included = df2_sheets - EXCLUDED_SHEETS
+
+    # 1) 공통 시트 중에서도 제외 대상이 아닌 시트만 비교
+    common_sheets = df1_sheets_included.intersection(df2_sheets_included)
     
     for sheet_name in common_sheets:
         ws = wb.create_sheet(title=sheet_name)
@@ -64,12 +74,12 @@ def highlight_changes(file1, file2, output_file):
                 # 결과 시트 셀
                 cell = ws.cell(row=i+1, column=j+1)
                 
-                # 우선 cell.value는 df2의 값이 있으면 그것을 사용, 아니면 df1 값
+                # 우선 cell.value는 df2의 값이 있으면 그것을 사용, 없으면 df1 값
                 cell.value = cell_value2 if cell_value2 is not None else cell_value1
 
                 # 비교 로직
                 if not are_values_equal(cell_value1, cell_value2):
-                    # 변경된 부분 (df1, df2 둘 다 값이 존재하나 서로 다를 때)
+                    # 변경된 부분 (df1, df2 둘 다 값이 있으나 서로 다름)
                     if cell_value1 is not None and cell_value2 is not None:
                         cell.fill = red_fill
                     # 추가된 부분 (df1은 None, df2에 값이 있을 때)
@@ -79,25 +89,25 @@ def highlight_changes(file1, file2, output_file):
                     elif cell_value1 is not None and cell_value2 is None:
                         cell.fill = yellow_fill
 
-    # 2) df1에만 존재하는 시트 => 모두 '삭제된' 것으로 간주
-    df1_only_sheets = set(df1.keys()) - set(df2.keys())
+    # 2) df1에만 존재하는 시트 중에서 제외 대상이 아닌 시트 => 모두 '삭제된' 것으로 간주
+    df1_only_sheets = df1_sheets_included - df2_sheets_included
     for sheet_name in df1_only_sheets:
-        ws = wb.create_sheet(title=f"{sheet_name}_DELETED")  # 어떤 식으로 명명할지 자유
+        ws = wb.create_sheet(title=f"{sheet_name}_DELETED")
         df1_sheet = df1[sheet_name]
         
-        for row_idx, row_data in enumerate(df1_sheet.itertuples(index=False, name=None)):
+        for row_data in df1_sheet.itertuples(index=False, name=None):
             ws.append(row_data)
         
-        # 추가로 색칠
+        # 전체를 노란색 표시
         max_rows = len(df1_sheet.index)
         max_cols = len(df1_sheet.columns)
         for i in range(max_rows):
             for j in range(max_cols):
                 cell = ws.cell(row=i+1, column=j+1)
-                cell.fill = yellow_fill  # 모두 삭제된 것으로 표시
+                cell.fill = yellow_fill
 
-    # 3) df2에만 존재하는 시트 => 모두 '추가된' 것으로 간주
-    df2_only_sheets = set(df2.keys()) - set(df1.keys())
+    # 3) df2에만 존재하는 시트 중에서 제외 대상이 아닌 시트 => 모두 '추가된' 것으로 간주
+    df2_only_sheets = df2_sheets_included - df1_sheets_included
     for sheet_name in df2_only_sheets:
         ws = wb.create_sheet(title=f"{sheet_name}_ADDED")
         df2_sheet = df2[sheet_name]
@@ -105,17 +115,16 @@ def highlight_changes(file1, file2, output_file):
         for row_data in df2_sheet.itertuples(index=False, name=None):
             ws.append(row_data)
         
-        # 추가로 색칠
+        # 전체를 파란색 표시
         max_rows = len(df2_sheet.index)
         max_cols = len(df2_sheet.columns)
         for i in range(max_rows):
             for j in range(max_cols):
                 cell = ws.cell(row=i+1, column=j+1)
-                cell.fill = blue_fill  # 모두 추가된 것으로 표시
+                cell.fill = blue_fill
 
-    # 4) 새로운 파일 저장
+    # 4) 최종 결과 저장
     wb.save(output_file)
-
 
 # ────────────── #
 #  GUI 인터페이스  #
@@ -139,7 +148,11 @@ def compare_files():
         messagebox.showerror("Error", "Both files must be selected!")
         return
 
-    output_file = filedialog.asksaveasfilename(title="Save the comparison result", defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+    output_file = filedialog.asksaveasfilename(
+        title="Save the comparison result",
+        defaultextension=".xlsx",
+        filetypes=[("Excel files", "*.xlsx")]
+    )
     if not output_file:
         return
 
@@ -151,7 +164,7 @@ def compare_files():
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("Excel File Comparison Tool (Enhanced)")
+    root.title("Excel File Comparison Tool (Exclude Certain Sheets)")
 
     frame = tk.Frame(root, padx=20, pady=20)
     frame.pack()
