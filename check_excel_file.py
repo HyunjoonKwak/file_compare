@@ -1,16 +1,16 @@
 import openpyxl
 from openpyxl.styles import PatternFill
-from openpyxl.utils import get_column_letter
 from tkinter import Tk, filedialog, messagebox, Button, Label
 
 # 셀 스타일 복사 함수
 def copy_cell_styles(source_cell, target_cell):
-    target_cell.font = source_cell.font
-    target_cell.border = source_cell.border
-    target_cell.fill = source_cell.fill
-    target_cell.number_format = source_cell.number_format
-    target_cell.protection = source_cell.protection
-    target_cell.alignment = source_cell.alignment
+    if source_cell.has_style:  # 스타일이 있는 셀만 복사
+        target_cell.font = source_cell.font
+        target_cell.border = source_cell.border
+        target_cell.fill = source_cell.fill
+        target_cell.number_format = source_cell.number_format
+        target_cell.protection = source_cell.protection
+        target_cell.alignment = source_cell.alignment
 
 def compare_excel_files(file1, file2, output_file):
     # 파일 불러오기
