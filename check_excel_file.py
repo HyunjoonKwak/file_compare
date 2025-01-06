@@ -1,6 +1,6 @@
 import openpyxl
 from openpyxl.styles import PatternFill
-from tkinter import Tk, filedialog, messagebox, Button, Label, Entry
+from tkinter import Tk, filedialog, messagebox, Button, Label
 
 def compare_excel_files(file1, file2, output_file):
     # 파일 불러오기
@@ -47,21 +47,18 @@ def compare_excel_files(file1, file2, output_file):
             common_keys = keys1 & keys2
 
             # 추가된 행
-            ws_result.append(["(추가된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows2.values()))))])  # 헤더
             for key in added_keys:
                 ws_result.append(rows2[key])
                 for cell in ws_result[ws_result.max_row]:
                     cell.fill = red_fill
 
             # 삭제된 행
-            ws_result.append(["(삭제된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows1.values()))))])  # 헤더
             for key in deleted_keys:
                 ws_result.append(rows1[key])
                 for cell in ws_result[ws_result.max_row]:
                     cell.fill = gray_fill
 
             # 변경된 행
-            ws_result.append(["(변경된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows1.values()))))])  # 헤더
             for key in common_keys:
                 row1 = rows1[key]
                 row2 = rows2[key]
@@ -89,10 +86,14 @@ def select_file(label):
         label.config(text=filename)
     return filename
 
+def select_save_file():
+    filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+    return filename
+
 def start_comparison():
     file1 = file1_label.cget("text")
     file2 = file2_label.cget("text")
-    output_file = output_entry.get()
+    output_file = select_save_file()
 
     if not file1 or not file2 or not output_file:
         messagebox.showerror("오류", "모든 파일과 저장 경로를 지정해주세요.")
@@ -118,12 +119,7 @@ file2_label = Label(root, text="", width=50, anchor="w", relief="solid")
 file2_label.grid(row=1, column=1, padx=10, pady=5)
 Button(root, text="파일 선택", command=lambda: select_file(file2_label)).grid(row=1, column=2, padx=10, pady=5)
 
-# 결과 저장 파일명 입력
-Label(root, text="저장 파일명:").grid(row=2, column=0, padx=10, pady=5)
-output_entry = Entry(root, width=53)
-output_entry.grid(row=2, column=1, padx=10, pady=5)
-
 # 비교 시작 버튼
-Button(root, text="비교 시작", command=start_comparison).grid(row=3, column=0, columnspan=3, pady=20)
+Button(root, text="비교 시작 및 저장", command=start_comparison).grid(row=2, column=0, columnspan=3, pady=20)
 
-root.mainloop()
+root.mainloop()s
