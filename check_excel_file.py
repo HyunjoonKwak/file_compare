@@ -2,7 +2,7 @@ import openpyxl
 from openpyxl.styles import PatternFill
 from tkinter import Tk, filedialog, messagebox, Button, Label, StringVar, ttk
 
-def compare_excel_files(file1, file2, output_file, progress_var):
+def compare_excel_files(file1, file2, output_file, progress_var, root):
     """
     두 Excel 파일을 비교하여 차이를 새 파일에 저장합니다.
     """
@@ -28,6 +28,7 @@ def compare_excel_files(file1, file2, output_file, progress_var):
 
         current_sheet += 1
         progress_var.set(int((current_sheet / total_sheets) * 100))
+        root.update_idletasks()  # 진행률 즉시 업데이트
 
         ws1 = wb1[sheet_name]
         ws2 = wb2[sheet_name]
@@ -92,6 +93,7 @@ def compare_excel_files(file1, file2, output_file, progress_var):
 
     wb_result.save(output_file)
     progress_var.set(100)  # 완료
+    root.update_idletasks()  # 마지막 업데이트
     messagebox.showinfo("완료", f"비교 결과가 {output_file}에 저장되었습니다.")
 
 def select_file(label):
@@ -115,7 +117,7 @@ def start_comparison():
 
     try:
         progress_var.set(0)
-        compare_excel_files(file1, file2, output_file, progress_var)
+        compare_excel_files(file1, file2, output_file, progress_var, root)
     except Exception as e:
         messagebox.showerror("오류", f"파일 비교 중 오류가 발생했습니다: {e}")
 
