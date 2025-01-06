@@ -1,230 +1,121 @@
-import pandas as pd
-from openpyxl import Workbook
+import openpyxl
 from openpyxl.styles import PatternFill
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import Tk, filedialog, messagebox, Button, Label, Entry
 
-# 비교 제외할 시트
-EXCLUDED_SHEETS = {"Cover", "test description", "Results"}
+def compare_excel_files(file1, file2, output_file):
+    # 파일 불러오기
+    wb1 = openpyxl.load_workbook(file1)
+    wb2 = openpyxl.load_workbook(file2)
 
-# 특수 처리할 시트 (열 비교)
-HISTORY_SHEET_NAME = "History"
+    # 결과 파일 생성
+    wb_result = openpyxl.Workbook()
 
-# Test ID의 위치 (B5 셀 기준)
-TEST_ID_COLUMN = "Test ID"
+    # 색상 정의
+    red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")  # 추가된 행
+    gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")  # 삭제된 행
+    blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")  # 변경된 셀
 
-# 색상 정의
-BLUE_FILL = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")   # 추가된 항목
-YELLOW_FILL = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid") # 삭제된 항목
-RED_FILL = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")    # 변경된 항목
-
-def load_excel_sheets(file_path):
-    """
-    엑셀 파일을 읽어서 {시트이름: DataFrame} 형태로 반환.
-    - EXCLUDED_SHEETS는 제외.
-    - 모든 시트의 B5를 Test ID로 설정.
-    """
-    xls = pd.ExcelFile(file_path)
-    sheet_dict = {}
-
-    for sheet_name in xls.sheet_names:
-        if sheet_name in EXCLUDED_SHEETS:
+    for sheet_name in wb1.sheetnames:
+        if sheet_name in ["Cover", "test description", "Results"]:
             continue
-        
-        df = pd.read_excel(file_path, sheet_name=sheet_name, header=4)  # 5번째 행을 헤더로 설정
-        if TEST_ID_COLUMN not in df.columns:
-            # B5의 값을 Test ID로 설정
-            original_col = df.columns[1]  # B 열은 0-based index에서 1번
-            df.rename(columns={original_col: TEST_ID_COLUMN}, inplace=True)
-        
-        sheet_dict[sheet_name] = df
-    
-    return sheet_dict
 
-def compare_history_columns(df1, df2, wb):
-    """
-    History 시트 전용: 첫 번째 파일(df1) 대비 두 번째 파일(df2)에서 새로 추가된 열(Column)만 비교.
-    """
-    cols1 = set(df1.columns)
-    cols2 = set(df2.columns)
+        ws1 = wb1[sheet_name]
+        ws2 = wb2[sheet_name]
+        ws_result = wb_result.create_sheet(sheet_name)
 
-    added_cols = cols2 - cols1  # df2에만 존재하는 열
-    if not added_cols:
-        return  # 추가된 열이 없으면 아무 작업도 하지 않음
+        if sheet_name == "History":
+            # History 시트 처리 (4열부터 비교)
+            rows1 = list(ws1.iter_rows(min_row=2, min_col=4, values_only=True))
+            rows2 = list(ws2.iter_rows(min_row=2, min_col=4, values_only=True))
 
-    ws = wb.create_sheet(title="History_AddedCols")
-    added_df = df2[list(added_cols)]
+            for row in rows2:
+                if row not in rows1:
+                    ws_result.append(["(추가된 행)"] + list(row))
 
-    ws.append(list(added_cols))  # 헤더 추가
-    for _, row_data in added_df.iterrows():
-        row_list = [row_data[col] for col in added_cols]
-        ws.append(row_list)
-
-    # 파란색 하이라이트
-    max_r = ws.max_row
-    max_c = ws.max_column
-    for r in range(1, max_r + 1):
-        for c in range(1, max_c + 1):
-            ws.cell(row=r, column=c).fill = BLUE_FILL
-
-def compare_sheets_by_test_id(sheet_name, df1, df2, wb):
-    """
-    History 이외의 시트 전용: Test ID 열을 기준으로 행 비교.
-    """
-    if TEST_ID_COLUMN not in df1.columns or TEST_ID_COLUMN not in df2.columns:
-        ws = wb.create_sheet(title=f"{sheet_name}_NO_KEY")
-        ws.cell(row=1, column=1).value = f"'{TEST_ID_COLUMN}' 열이 없어 비교 불가"
-        return
-
-    merged_df = pd.merge(
-        df1, df2, on=TEST_ID_COLUMN, how="outer", indicator=True, suffixes=("_old", "_new")
-    )
-
-    ws = wb.create_sheet(title=sheet_name)
-    df1_cols = list(df1.columns)
-    df1_cols.remove(TEST_ID_COLUMN)
-    df2_cols = list(df2.columns)
-    df2_cols.remove(TEST_ID_COLUMN)
-
-    output_cols = [TEST_ID_COLUMN]
-    for col in df1_cols:
-        output_cols.append(col + "_old")
-    for col in df2_cols:
-        output_cols.append(col + "_new")
-    output_cols.append("_merge")
-
-    final_cols = [c for c in output_cols if c in merged_df.columns]
-    ws.append(final_cols)
-
-    for _, row_data in merged_df[final_cols].iterrows():
-        ws.append(row_data.tolist())
-
-    merge_col_idx = final_cols.index("_merge") + 1
-    old_map = {}
-    new_map = {}
-
-    for idx, col_name in enumerate(final_cols, start=1):
-        if col_name.endswith("_old"):
-            old_map[col_name[:-4]] = idx
-        elif col_name.endswith("_new"):
-            new_map[col_name[:-4]] = idx
-
-    max_r = ws.max_row
-    max_c = ws.max_column
-
-    for r in range(2, max_r + 1):
-        merge_val = ws.cell(row=r, column=merge_col_idx).value
-
-        if merge_val == "left_only":
-            for c in range(1, max_c + 1):
-                ws.cell(row=r, column=c).fill = YELLOW_FILL
-        elif merge_val == "right_only":
-            for c in range(1, max_c + 1):
-                ws.cell(row=r, column=c).fill = BLUE_FILL
         else:
-            for orig_col in old_map:
-                old_idx = old_map[orig_col]
-                new_idx = new_map.get(orig_col)
-                if not new_idx:
-                    continue
-                val_old = ws.cell(row=r, column=old_idx).value
-                val_new = ws.cell(row=r, column=new_idx).value
-                if val_old != val_new:
-                    ws.cell(row=r, column=old_idx).fill = RED_FILL
-                    ws.cell(row=r, column=new_idx).fill = RED_FILL
+            # 나머지 시트 처리 (B열 기준)
+            rows1 = {row[1]: row for row in ws1.iter_rows(min_row=2, values_only=True) if row[1] and str(row[1]).startswith("IO")}
+            rows2 = {row[1]: row for row in ws2.iter_rows(min_row=2, values_only=True) if row[1] and str(row[1]).startswith("IO")}
 
-def compare_files_logic(file1, file2, output_file):
-    """
-    전체 비교 로직 수행.
-    """
-    df1_dict = load_excel_sheets(file1)
-    df2_dict = load_excel_sheets(file2)
+            keys1 = set(rows1.keys())
+            keys2 = set(rows2.keys())
 
-    wb = Workbook()
-    wb.remove(wb.active)
+            added_keys = keys2 - keys1
+            deleted_keys = keys1 - keys2
+            common_keys = keys1 & keys2
 
-    df1_sheets = set(df1_dict.keys())
-    df2_sheets = set(df2_dict.keys())
-    common_sheets = df1_sheets & df2_sheets
+            # 추가된 행
+            for key in added_keys:
+                ws_result.append(rows2[key])
+                for cell in ws_result[ws_result.max_row]:
+                    cell.fill = red_fill
 
-    if HISTORY_SHEET_NAME in common_sheets:
-        df1_hist = df1_dict[HISTORY_SHEET_NAME]
-        df2_hist = df2_dict[HISTORY_SHEET_NAME]
-        compare_history_columns(df1_hist, df2_hist, wb)
-        common_sheets.remove(HISTORY_SHEET_NAME)
+            # 삭제된 행
+            for key in deleted_keys:
+                ws_result.append(rows1[key])
+                for cell in ws_result[ws_result.max_row]:
+                    cell.fill = gray_fill
 
-    for sheet_name in sorted(common_sheets):
-        compare_sheets_by_test_id(sheet_name, df1_dict[sheet_name], df2_dict[sheet_name], wb)
+            # 변경된 행
+            for key in common_keys:
+                row1 = rows1[key]
+                row2 = rows2[key]
+                new_row = []
+                for cell1, cell2 in zip(row1, row2):
+                    if cell1 == cell2:
+                        new_row.append(cell1)
+                    else:
+                        new_row.append(cell2)
+                ws_result.append(new_row)
+                for i, (cell1, cell2) in enumerate(zip(row1, row2)):
+                    if cell1 != cell2:
+                        ws_result.cell(row=ws_result.max_row, column=i + 1).fill = blue_fill
 
-    df1_only = df1_sheets - df2_sheets
-    for sheet_name in sorted(df1_only):
-        df1_sheet = df1_dict[sheet_name]
-        ws = wb.create_sheet(title=f"{sheet_name}_DELETED")
-        for row_data in df1_sheet.itertuples(index=False, name=None):
-            ws.append(row_data)
-        max_r = ws.max_row
-        max_c = ws.max_column
-        for r in range(1, max_r + 1):
-            for c in range(1, max_c + 1):
-                ws.cell(row=r, column=c).fill = YELLOW_FILL
+    # 결과 저장
+    wb_result.save(output_file)
+    messagebox.showinfo("완료", f"비교 결과가 {output_file}에 저장되었습니다.")
 
-    df2_only = df2_sheets - df1_sheets
-    for sheet_name in sorted(df2_only):
-        df2_sheet = df2_dict[sheet_name]
-        ws = wb.create_sheet(title=f"{sheet_name}_ADDED")
-        for row_data in df2_sheet.itertuples(index=False, name=None):
-            ws.append(row_data)
-        max_r = ws.max_row
-        max_c = ws.max_column
-        for r in range(1, max_r + 1):
-            for c in range(1, max_c + 1):
-                ws.cell(row=r, column=c).fill = BLUE_FILL
+def select_file(label):
+    filename = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+    if filename:
+        label.config(text=filename)
+    return filename
 
-    wb.save(output_file)
+def start_comparison():
+    file1 = file1_label.cget("text")
+    file2 = file2_label.cget("text")
+    output_file = output_entry.get()
 
-def select_first_file():
-    path = filedialog.askopenfilename(title="Select the first Excel file", filetypes=[("Excel files", "*.xlsx")])
-    if path:
-        first_file_var.set(path)
-
-def select_second_file():
-    path = filedialog.askopenfilename(title="Select the second Excel file", filetypes=[("Excel files", "*.xlsx")])
-    if path:
-        second_file_var.set(path)
-
-def do_compare():
-    f1 = first_file_var.get()
-    f2 = second_file_var.get()
-    if not f1 or not f2:
-        messagebox.showerror("Error", "Both files must be selected!")
+    if not file1 or not file2 or not output_file:
+        messagebox.showerror("오류", "모든 파일과 저장 경로를 지정해주세요.")
         return
-    output_file = filedialog.asksaveasfilename(title="Save the comparison result", defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
-    if not output_file:
-        return
+
     try:
-        compare_files_logic(f1, f2, output_file)
-        messagebox.showinfo("Success", f"Comparison complete!\nSaved to: {output_file}")
+        compare_excel_files(file1, file2, output_file)
     except Exception as e:
-        messagebox.showerror("Error", f"An error occurred:\n{e}")
+        messagebox.showerror("오류", f"파일 비교 중 오류가 발생했습니다: {e}")
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Excel Comparison Tool - History & Test ID")
+# Tkinter 인터페이스 생성
+root = Tk()
+root.title("Excel 파일 비교")
 
-    frame = tk.Frame(root, padx=20, pady=20)
-    frame.pack()
+# 파일 선택 UI
+Label(root, text="첫 번째 파일:").grid(row=0, column=0, padx=10, pady=5)
+file1_label = Label(root, text="", width=50, anchor="w", relief="solid")
+file1_label.grid(row=0, column=1, padx=10, pady=5)
+Button(root, text="파일 선택", command=lambda: select_file(file1_label)).grid(row=0, column=2, padx=10, pady=5)
 
-    tk.Label(frame, text="First Excel File:", font=("Arial", 12)).grid(row=0, column=0, sticky="e", pady=5)
-    first_file_var = tk.StringVar()
-    tk.Entry(frame, textvariable=first_file_var, width=50, state="readonly").grid(row=0, column=1, padx=5, pady=5)
-    tk.Button(frame, text="Browse", command=select_first_file).grid(row=0, column=2, padx=5, pady=5)
+Label(root, text="두 번째 파일:").grid(row=1, column=0, padx=10, pady=5)
+file2_label = Label(root, text="", width=50, anchor="w", relief="solid")
+file2_label.grid(row=1, column=1, padx=10, pady=5)
+Button(root, text="파일 선택", command=lambda: select_file(file2_label)).grid(row=1, column=2, padx=10, pady=5)
 
-    tk.Label(frame, text="Second Excel File:", font=("Arial", 12)).grid(row=1, column=0, sticky="e", pady=5)
-    second_file_var = tk.StringVar()
-    tk.Entry(frame, textvariable=second_file_var, width=50, state="readonly").grid(row=1, column=1, padx=5, pady=5)
-    tk.Button(frame, text="Browse", command=select_second_file).grid(row=1, column=2, padx=5, pady=5)
+# 결과 저장 파일명 입력
+Label(root, text="저장 파일명:").grid(row=2, column=0, padx=10, pady=5)
+output_entry = Entry(root, width=53)
+output_entry.grid(row=2, column=1, padx=10, pady=5)
 
-    compare_btn = tk.Button(frame, text="Compare Files", command=do_compare, font=("Arial", 12))
-    compare_btn.grid(row=2, column=0, columnspan=3, pady=20)
+# 비교 시작 버튼
+Button(root, text="비교 시작", command=start_comparison).grid(row=3, column=0, columnspan=3, pady=20)
 
-    root.mainloop()
+root.mainloop()
