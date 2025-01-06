@@ -4,15 +4,21 @@ from tkinter import Tk, filedialog, messagebox, Button, Label
 
 # 셀 스타일 복사 함수
 def copy_cell_styles(source_cell, target_cell):
-    if source_cell.has_style:  # 스타일이 있는 셀만 복사
-        target_cell.font = source_cell.font
-        target_cell.border = source_cell.border
-        target_cell.fill = source_cell.fill
+    """
+    원본 셀의 스타일을 결과 셀에 복사합니다.
+    """
+    if source_cell.has_style:  # 스타일이 있는 경우에만 복사
+        target_cell.font = source_cell.font.copy()
+        target_cell.border = source_cell.border.copy()
+        target_cell.fill = source_cell.fill.copy()
         target_cell.number_format = source_cell.number_format
-        target_cell.protection = source_cell.protection
-        target_cell.alignment = source_cell.alignment
+        target_cell.protection = source_cell.protection.copy()
+        target_cell.alignment = source_cell.alignment.copy()
 
 def compare_excel_files(file1, file2, output_file):
+    """
+    두 Excel 파일을 비교하여 차이를 새 파일에 저장합니다.
+    """
     # 파일 불러오기
     wb1 = openpyxl.load_workbook(file1)
     wb2 = openpyxl.load_workbook(file2)
