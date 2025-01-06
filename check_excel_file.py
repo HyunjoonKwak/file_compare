@@ -1,8 +1,8 @@
 import openpyxl
 from openpyxl.styles import PatternFill
-from tkinter import Tk, filedialog, messagebox, Button, Label
+from tkinter import Tk, filedialog, messagebox, Button, Label, StringVar, ttk
 
-def compare_excel_files(file1, file2, output_file):
+def compare_excel_files(file1, file2, output_file, progress_var):
     """
     두 Excel 파일을 비교하여 차이를 새 파일에 저장합니다.
     """
@@ -19,9 +19,15 @@ def compare_excel_files(file1, file2, output_file):
     gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")  # 삭제된 행 (회색)
     blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")  # 변경된 셀 (파란색)
 
+    total_sheets = len([name for name in wb1.sheetnames if name not in ["Cover", "test description", "Results"]])
+    current_sheet = 0
+
     for sheet_name in wb1.sheetnames:
         if sheet_name in ["Cover", "test description", "Results"]:
             continue
+
+        current_sheet += 1
+        progress_var.set(int((current_sheet / total_sheets) * 100))
 
         ws1 = wb1[sheet_name]
         ws2 = wb2[sheet_name]
@@ -85,6 +91,7 @@ def compare_excel_files(file1, file2, output_file):
         output_file += ".xlsx"
 
     wb_result.save(output_file)
+    progress_var.set(100)  # 완료
     messagebox.showinfo("완료", f"비교 결과가 {output_file}에 저장되었습니다.")
 
 def select_file(label):
@@ -107,7 +114,8 @@ def start_comparison():
         return
 
     try:
-        compare_excel_files(file1, file2, output_file)
+        progress_var.set(0)
+        compare_excel_files(file1, file2, output_file, progress_var)
     except Exception as e:
         messagebox.showerror("오류", f"파일 비교 중 오류가 발생했습니다: {e}")
 
@@ -115,7 +123,10 @@ def start_comparison():
 root = Tk()
 root.title("Excel 파일 비교")
 
-# 파일 선택 UI
+# 진행률 변수 및 Progressbar 생성
+progress_var = StringVar()
+progress_var.set(0)
+
 Label(root, text="첫 번째 파일:").grid(row=0, column=0, padx=10, pady=5)
 file1_label = Label(root, text="", width=50, anchor="w", relief="solid")
 file1_label.grid(row=0, column=1, padx=10, pady=5)
@@ -126,7 +137,13 @@ file2_label = Label(root, text="", width=50, anchor="w", relief="solid")
 file2_label.grid(row=1, column=1, padx=10, pady=5)
 Button(root, text="파일 선택", command=lambda: select_file(file2_label)).grid(row=1, column=2, padx=10, pady=5)
 
+progress_label = Label(root, text="진행률:")
+progress_label.grid(row=2, column=0, padx=10, pady=5)
+
+progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate", variable=progress_var)
+progress_bar.grid(row=2, column=1, columnspan=2, padx=10, pady=5)
+
 # 비교 시작 버튼
-Button(root, text="비교 시작 및 저장", command=start_comparison).grid(row=2, column=0, columnspan=3, pady=20)
+Button(root, text="비교 시작 및 저장", command=start_comparison).grid(row=3, column=0, columnspan=3, pady=20)
 
 root.mainloop()
