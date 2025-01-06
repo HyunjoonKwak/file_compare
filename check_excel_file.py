@@ -15,9 +15,9 @@ def compare_excel_files(file1, file2, output_file):
     wb_result.remove(wb_result.active)  # 기본 시트 제거
 
     # 색상 정의
-    red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")  # 추가된 행
-    gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")  # 삭제된 행
-    blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")  # 변경된 셀
+    pink_fill = PatternFill(start_color="FFC0CB", end_color="FFC0CB", fill_type="solid")  # 추가된 행 (연분홍)
+    gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")  # 삭제된 행 (회색)
+    blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")  # 변경된 셀 (파란색)
 
     for sheet_name in wb1.sheetnames:
         if sheet_name in ["Cover", "test description", "Results"]:
@@ -53,7 +53,7 @@ def compare_excel_files(file1, file2, output_file):
                 row = rows2[key]
                 ws_result.append(row)
                 for cell in ws_result[ws_result.max_row]:
-                    cell.fill = red_fill
+                    cell.fill = pink_fill
 
             # 삭제된 행
             for key in deleted_keys:
@@ -66,16 +66,19 @@ def compare_excel_files(file1, file2, output_file):
             for key in common_keys:
                 row1 = rows1[key]
                 row2 = rows2[key]
+                is_changed = False
                 new_row = []
                 for cell1, cell2 in zip(row1, row2):
                     if cell1 == cell2:
                         new_row.append(cell2)
                     else:
                         new_row.append(cell2)
-                ws_result.append(new_row)
-                for i, (cell1, cell2) in enumerate(zip(row1, row2)):
-                    if cell1 != cell2:
-                        ws_result.cell(row=ws_result.max_row, column=i + 1).fill = blue_fill
+                        is_changed = True
+                if is_changed:  # 변경된 행만 추가
+                    ws_result.append(new_row)
+                    for i, (cell1, cell2) in enumerate(zip(row1, row2)):
+                        if cell1 != cell2:
+                            ws_result.cell(row=ws_result.max_row, column=i + 1).fill = blue_fill
 
     # 파일 확장자 확인 및 저장
     if not output_file.endswith(".xlsx"):
