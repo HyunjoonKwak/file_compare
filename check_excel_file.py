@@ -9,6 +9,7 @@ def compare_excel_files(file1, file2, output_file):
 
     # 결과 파일 생성
     wb_result = openpyxl.Workbook()
+    wb_result.remove(wb_result.active)  # 기본 시트 제거
 
     # 색상 정의
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")  # 추가된 행
@@ -28,9 +29,10 @@ def compare_excel_files(file1, file2, output_file):
             rows1 = list(ws1.iter_rows(min_row=2, min_col=4, values_only=True))
             rows2 = list(ws2.iter_rows(min_row=2, min_col=4, values_only=True))
 
+            ws_result.append(["(추가된 행)"] + [f"열 {i+4}" for i in range(len(rows2[0]))])  # 헤더
             for row in rows2:
                 if row not in rows1:
-                    ws_result.append(["(추가된 행)"] + list(row))
+                    ws_result.append(list(row))
 
         else:
             # 나머지 시트 처리 (B열 기준)
@@ -45,18 +47,21 @@ def compare_excel_files(file1, file2, output_file):
             common_keys = keys1 & keys2
 
             # 추가된 행
+            ws_result.append(["(추가된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows2.values()))))])  # 헤더
             for key in added_keys:
                 ws_result.append(rows2[key])
                 for cell in ws_result[ws_result.max_row]:
                     cell.fill = red_fill
 
             # 삭제된 행
+            ws_result.append(["(삭제된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows1.values()))))])  # 헤더
             for key in deleted_keys:
                 ws_result.append(rows1[key])
                 for cell in ws_result[ws_result.max_row]:
                     cell.fill = gray_fill
 
             # 변경된 행
+            ws_result.append(["(변경된 행)"] + [f"열 {i+1}" for i in range(len(next(iter(rows1.values()))))])  # 헤더
             for key in common_keys:
                 row1 = rows1[key]
                 row2 = rows2[key]
@@ -71,7 +76,10 @@ def compare_excel_files(file1, file2, output_file):
                     if cell1 != cell2:
                         ws_result.cell(row=ws_result.max_row, column=i + 1).fill = blue_fill
 
-    # 결과 저장
+    # 파일 확장자 확인 및 저장
+    if not output_file.endswith(".xlsx"):
+        output_file += ".xlsx"
+
     wb_result.save(output_file)
     messagebox.showinfo("완료", f"비교 결과가 {output_file}에 저장되었습니다.")
 
