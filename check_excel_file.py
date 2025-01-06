@@ -2,19 +2,6 @@ import openpyxl
 from openpyxl.styles import PatternFill
 from tkinter import Tk, filedialog, messagebox, Button, Label
 
-# 셀 스타일 복사 함수
-def copy_cell_styles(source_cell, target_cell):
-    """
-    원본 셀의 스타일을 결과 셀에 복사합니다.
-    """
-    if source_cell.has_style:  # 스타일이 있는 경우에만 복사
-        target_cell.font = source_cell.font.copy()
-        target_cell.border = source_cell.border.copy()
-        target_cell.fill = source_cell.fill.copy()
-        target_cell.number_format = source_cell.number_format
-        target_cell.protection = source_cell.protection.copy()
-        target_cell.alignment = source_cell.alignment.copy()
-
 def compare_excel_files(file1, file2, output_file):
     """
     두 Excel 파일을 비교하여 차이를 새 파일에 저장합니다.
@@ -40,26 +27,19 @@ def compare_excel_files(file1, file2, output_file):
         ws2 = wb2[sheet_name]
         ws_result = wb_result.create_sheet(sheet_name)
 
-        # 시트 크기 조정
-        ws_result.sheet_format.defaultRowHeight = ws1.sheet_format.defaultRowHeight
-        for col_letter, col_dim in ws1.column_dimensions.items():
-            ws_result.column_dimensions[col_letter] = col_dim
-
         if sheet_name == "History":
             # History 시트 처리 (4열부터 비교)
-            rows1 = list(ws1.iter_rows(min_row=2, min_col=4, values_only=False))
-            rows2 = list(ws2.iter_rows(min_row=2, min_col=4, values_only=False))
+            rows1 = list(ws1.iter_rows(min_row=2, min_col=4, values_only=True))
+            rows2 = list(ws2.iter_rows(min_row=2, min_col=4, values_only=True))
 
             for i, row in enumerate(rows2):
-                if [cell.value for cell in row] not in [[cell.value for cell in r] for r in rows1]:
-                    ws_result.append(["(추가된 행)"] + [cell.value for cell in row])
-                    for col_idx, source_cell in enumerate(row, start=2):  # 스타일 복사
-                        copy_cell_styles(source_cell, ws_result.cell(row=ws_result.max_row, column=col_idx))
+                if row not in rows1:
+                    ws_result.append(["(추가된 행)"] + list(row))
 
         else:
             # 나머지 시트 처리 (B열 기준)
-            rows1 = {row[1].value: row for row in ws1.iter_rows(min_row=2, values_only=False) if row[1] and str(row[1].value).startswith("IO")}
-            rows2 = {row[1].value: row for row in ws2.iter_rows(min_row=2, values_only=False) if row[1] and str(row[1].value).startswith("IO")}
+            rows1 = {row[1]: row for row in ws1.iter_rows(min_row=2, values_only=True) if row[1] and str(row[1]).startswith("IO")}
+            rows2 = {row[1]: row for row in ws2.iter_rows(min_row=2, values_only=True) if row[1] and str(row[1]).startswith("IO")}
 
             keys1 = set(rows1.keys())
             keys2 = set(rows2.keys())
@@ -71,20 +51,16 @@ def compare_excel_files(file1, file2, output_file):
             # 추가된 행
             for key in added_keys:
                 row = rows2[key]
-                ws_result.append([cell.value for cell in row])
-                for col_idx, source_cell in enumerate(row, start=1):  # 스타일 복사
-                    target_cell = ws_result.cell(row=ws_result.max_row, column=col_idx)
-                    copy_cell_styles(source_cell, target_cell)
-                    target_cell.fill = red_fill
+                ws_result.append(row)
+                for cell in ws_result[ws_result.max_row]:
+                    cell.fill = red_fill
 
             # 삭제된 행
             for key in deleted_keys:
                 row = rows1[key]
-                ws_result.append([cell.value for cell in row])
-                for col_idx, source_cell in enumerate(row, start=1):  # 스타일 복사
-                    target_cell = ws_result.cell(row=ws_result.max_row, column=col_idx)
-                    copy_cell_styles(source_cell, target_cell)
-                    target_cell.fill = gray_fill
+                ws_result.append(row)
+                for cell in ws_result[ws_result.max_row]:
+                    cell.fill = gray_fill
 
             # 변경된 행
             for key in common_keys:
@@ -92,16 +68,14 @@ def compare_excel_files(file1, file2, output_file):
                 row2 = rows2[key]
                 new_row = []
                 for cell1, cell2 in zip(row1, row2):
-                    if cell1.value == cell2.value:
-                        new_row.append(cell2.value)
+                    if cell1 == cell2:
+                        new_row.append(cell2)
                     else:
-                        new_row.append(cell2.value)
+                        new_row.append(cell2)
                 ws_result.append(new_row)
-                for col_idx, (cell1, cell2) in enumerate(zip(row1, row2), start=1):
-                    target_cell = ws_result.cell(row=ws_result.max_row, column=col_idx)
-                    copy_cell_styles(cell2, target_cell)
-                    if cell1.value != cell2.value:
-                        target_cell.fill = blue_fill
+                for i, (cell1, cell2) in enumerate(zip(row1, row2)):
+                    if cell1 != cell2:
+                        ws_result.cell(row=ws_result.max_row, column=i + 1).fill = blue_fill
 
     # 파일 확장자 확인 및 저장
     if not output_file.endswith(".xlsx"):
